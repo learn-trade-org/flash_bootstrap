@@ -13,14 +13,18 @@ FLASH_DIR="${FLASH_DIR:-$(cd "$(dirname "$0")/../flash" && pwd)}"
 SUDO=""
 if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
 
-# Bind mounts must be writable by the container user (UID 1000, per Dockerfile).
-# On a root-cloned droplet the files are root-owned, so the container can't
-# create node_modules (app) or write /data/db (mongo). Create the mongo data
-# dir and align ownership of the WRITABLE mounts only — .git is left untouched
-# to avoid git "dubious ownership" on later root-run pulls.
+# Bind mounts must be accessible by the container user (UID 1000, per
+# Dockerfile). On a root-cloned droplet the files are root-owned, so:
+#   - app can't create node_modules in backend/ frontend/
+#   - mongo can't write /data/db
+#   - app (UID 1000) can't READ .env (chmod 600, root-owned) → MONGO_* unset
+# Create the mongo data dir and align ownership of the mounts the container
+# touches. .git is left untouched to avoid git "dubious ownership" on later
+# root-run pulls.
 echo "==> [03] preparing bind-mount dirs (mkdir db/mongo + chown -> 1000:1000)"
 mkdir -p "${FLASH_DIR}/db/mongo"
 $SUDO chown -R 1000:1000 "${FLASH_DIR}/backend" "${FLASH_DIR}/frontend" "${FLASH_DIR}/db"
+$SUDO chown 1000:1000 "${FLASH_DIR}/.env"
 
 echo "==> [03] starting FLASH via launch.sh"
 $SUDO bash "${FLASH_DIR}/launch.sh" start
