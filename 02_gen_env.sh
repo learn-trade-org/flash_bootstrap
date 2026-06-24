@@ -18,8 +18,32 @@ set -e
 FLASH_DIR="${FLASH_DIR:-$(cd "$(dirname "$0")/../flash" && pwd)}"
 ENV_FILE="${FLASH_DIR}/.env"
 
+# DOCKER_GID — the gid of the host's `docker` group, a CONSTANT 999 on the
+# Ubuntu droplet (the docker package's default gid). compose `group_add` reads
+# ${DOCKER_GID} so flash_app (uid 1000) can reach /var/run/docker.sock to run
+# strategy containers. Pinned, not auto-detected, so every box is identical.
+DOCKER_GID=999
+
+# FLASH_VERSION — the image tag the customer compose pulls. Pinned in the
+# flash_bootstrap/flash.version file (owner bumps it per ship); falls back to
+# `latest`. docker compose reads ${FLASH_VERSION} from this .env automatically.
+FLASH_VERSION="$(cat "$(dirname "$0")/flash.version" 2>/dev/null | tr -d '[:space:]')"
+FLASH_VERSION="${FLASH_VERSION:-latest}"
+
 if [ -f "${ENV_FILE}" ]; then
-  echo "==> [02] ${ENV_FILE} already exists — leaving it untouched."
+  echo "==> [02] ${ENV_FILE} already exists — leaving creds untouched."
+  # idempotently ensure the constant lines are present (safe to re-run).
+  if ! grep -q '^DOCKER_GID=' "${ENV_FILE}"; then
+    echo "DOCKER_GID=${DOCKER_GID}" >> "${ENV_FILE}"
+    echo "==> [02] appended DOCKER_GID=${DOCKER_GID} to existing .env"
+  fi
+  # FLASH_VERSION may change between ships — keep it in sync with flash.version.
+  if grep -q '^FLASH_VERSION=' "${ENV_FILE}"; then
+    sed -i.bak "s/^FLASH_VERSION=.*/FLASH_VERSION=${FLASH_VERSION}/" "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
+  else
+    echo "FLASH_VERSION=${FLASH_VERSION}" >> "${ENV_FILE}"
+  fi
+  echo "==> [02] FLASH_VERSION pinned to ${FLASH_VERSION}"
   exit 0
 fi
 
@@ -35,7 +59,9 @@ MONGO_PORT=27017
 APP_HOST_PORT=7200
 MONGO_HOST_PORT=7220
 ADMIN_INITIAL_PIN=123456
+DOCKER_GID=${DOCKER_GID}
+FLASH_VERSION=${FLASH_VERSION}
 EOF
 
 chmod 600 "${ENV_FILE}"
-echo "==> [02] wrote .env (app:7200  mongo:7220  admin pin:123456)"
+echo "==> [02] wrote .env (app:7200  mongo:7220  admin pin:123456  v:${FLASH_VERSION})"

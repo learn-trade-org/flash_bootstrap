@@ -1,0 +1,55 @@
+# Customer (pull-and-run) compose. The app is a PRE-BUILT image pulled from
+# GHCR — no `build:`, no source mounts. Only DATA (./db/*), SECRETS (./.env,
+# auto-generated per box), and the mongo bootstrap scripts are bind-mounted.
+#
+# This file ships inside flash_bootstrap/assets and is copied into the generated
+# flash/ runtime dir. Brought up by 03_compose_up.sh / launch.sh with:
+#   docker compose -f docker-compose.customer.yml pull && up -d   (NO --build)
+#
+# Contrast with docker-compose.yml (dev / own-prod): that one builds locally and
+# bind-mounts ./backend + ./frontend source. Here the code lives in the image.
+
+services:
+  mongo:
+    # Baked image — bootstrap scripts (entrypoint.sh + init.js) are COPYed in,
+    # not mounted, so the customer box needs no ./container/mongo source.
+    image: ghcr.io/learn-trade-org/flash-mongo:${FLASH_VERSION:-latest}
+    container_name: flash_db
+    restart: unless-stopped
+    user: "1000:1000"
+    entrypoint: ["bash", "/usr/local/bin/mongo-entrypoint.sh"]
+    environment:
+      - MONGO_ROOT_USER=${MONGO_ROOT_USER:?MONGO_ROOT_USER must be set in .env}
+      - MONGO_ROOT_PASS=${MONGO_ROOT_PASS:?MONGO_ROOT_PASS must be set in .env}
+      - MONGO_PRIMARY_USER=${MONGO_PRIMARY_USER:?MONGO_PRIMARY_USER must be set in .env}
+      - MONGO_PRIMARY_PASS=${MONGO_PRIMARY_PASS:?MONGO_PRIMARY_PASS must be set in .env}
+    ports:
+      - "${MONGO_HOST_PORT:-10620}:27017"
+    volumes:
+      - ./db/mongo:/data/db
+
+  app:
+    # Baked image pulled from GHCR — pinned to the published version by .env.
+    image: ghcr.io/learn-trade-org/flash-app:${FLASH_VERSION:-latest}
+    container_name: flash_app
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    group_add:
+      - "${DOCKER_GID:-0}"
+    environment:
+      MONGO_HOST: mongo
+      MONGO_PORT: "27017"
+      HOST_STRATEGY_PATH: ${PWD}/db/strategy
+    ports:
+      - "${APP_HOST_PORT:-10600}:10600"
+    volumes:
+      # Secrets only — code is baked into the image (no ./backend, ./frontend).
+      - ./.env:/app/.env:ro
+      # Runtime data — survives image destroy/upgrade (one-truth on the host).
+      - ./db/instrument:/app/instrument
+      - ./db/tick:/app/tick
+      - ./db/strategy:/app/strategy
+      # Strategy-container engine: drive the host daemon to run sibling
+      # flash-strategy-runtime containers.
+      - /var/run/docker.sock:/var/run/docker.sock

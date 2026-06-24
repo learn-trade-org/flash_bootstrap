@@ -1,10 +1,11 @@
 #!/bin/bash
-# [03] Bring up the FLASH stack via flash's prod launcher (launch.sh).
+# [03] Pull the baked images + bring up the FLASH stack via the runtime
+# launcher (flash/launch.sh).
 #
 # Run by 00_bootstrap.sh (which exports FLASH_DIR), or standalone — when
 # standalone, FLASH_DIR defaults to the sibling ../flash. Delegates to
-# flash/launch.sh so compose lifecycle has one source of truth (prod compose
-# only — no dev :5173). Uses sudo only when not already root.
+# flash/launch.sh so compose lifecycle has one source of truth (pull + up,
+# no build). Uses sudo only when not already root.
 
 set -e
 
@@ -13,22 +14,21 @@ FLASH_DIR="${FLASH_DIR:-$(cd "$(dirname "$0")/../flash" && pwd)}"
 SUDO=""
 if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
 
-# Bind mounts must be accessible by the container user (UID 1000, per
-# Dockerfile). On a root-cloned droplet the files are root-owned, so:
-#   - app can't create node_modules in backend/ frontend/
+# Data dirs must be writable by the container user (UID 1000, per image). On a
+# root-run droplet the files are root-owned, so:
 #   - mongo can't write /data/db
 #   - app (UID 1000) can't READ .env (chmod 600, root-owned) → MONGO_* unset
-# Create the mongo data dir and align ownership of the mounts the container
-# touches. .git is left untouched to avoid git "dubious ownership" on later
-# root-run pulls.
-echo "==> [03] preparing bind-mount dirs (mkdir db/mongo + chown -> 1000:1000)"
-mkdir -p "${FLASH_DIR}/db/mongo"
-$SUDO chown -R 1000:1000 "${FLASH_DIR}/backend" "${FLASH_DIR}/frontend" "${FLASH_DIR}/db"
+#   - app can't write db/strategy, db/tick, db/instrument
+# Only DATA + .env need aligning now — there's no backend/frontend source on
+# the box anymore (code is baked into the pulled images).
+echo "==> [03] preparing data dirs (mkdir db/* + chown -> 1000:1000)"
+mkdir -p "${FLASH_DIR}/db/mongo" "${FLASH_DIR}/db/strategy" "${FLASH_DIR}/db/strategy/.logs" "${FLASH_DIR}/db/tick" "${FLASH_DIR}/db/instrument"
+$SUDO chown -R 1000:1000 "${FLASH_DIR}/db"
 $SUDO chown 1000:1000 "${FLASH_DIR}/.env"
 
-echo "==> [03] starting FLASH via launch.sh"
+echo "==> [03] pulling images + starting FLASH via launch.sh"
 $SUDO bash "${FLASH_DIR}/launch.sh" start
 
 echo
 echo "==> [03] FLASH starting on http://$(hostname -I | awk '{print $1}'):7200"
-echo "    login: admin / 123456   (first boot builds the bundle — give it ~1 min)"
+echo "    login: admin / 123456   (first pull may take a minute)"
