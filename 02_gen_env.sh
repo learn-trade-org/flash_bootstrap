@@ -18,11 +18,14 @@ set -e
 FLASH_DIR="${FLASH_DIR:-$(cd "$(dirname "$0")/../flash" && pwd)}"
 ENV_FILE="${FLASH_DIR}/.env"
 
-# DOCKER_GID — the gid of the host's `docker` group, a CONSTANT 999 on the
-# Ubuntu droplet (the docker package's default gid). compose `group_add` reads
+# DOCKER_GID — the gid of the host's `docker` group. compose `group_add` reads
 # ${DOCKER_GID} so flash_app (uid 1000) can reach /var/run/docker.sock to run
-# strategy containers. Pinned, not auto-detected, so every box is identical.
-DOCKER_GID=999
+# strategy containers. AUTO-DETECTED from the host (it varies per box — e.g. 989
+# vs 999 depending on install order); falls back to 999 if the group is absent.
+# A wrong gid → app can't read the socket → strategy deploy fails with
+# `container_engine_fault` ("typo in the url or port?").
+DOCKER_GID="$(getent group docker | cut -d: -f3)"
+DOCKER_GID="${DOCKER_GID:-999}"
 
 # FLASH_VERSION — the image tag the customer compose pulls. Pinned in the
 # flash_bootstrap/flash.version file (owner bumps it per ship); falls back to
@@ -32,11 +35,14 @@ FLASH_VERSION="${FLASH_VERSION:-latest}"
 
 if [ -f "${ENV_FILE}" ]; then
   echo "==> [02] ${ENV_FILE} already exists — leaving creds untouched."
-  # idempotently ensure the constant lines are present (safe to re-run).
-  if ! grep -q '^DOCKER_GID=' "${ENV_FILE}"; then
+  # DOCKER_GID is host-derived, not a cred — reconcile it to the detected value
+  # on every run (a stale/wrong gid breaks strategy-container deploys).
+  if grep -q '^DOCKER_GID=' "${ENV_FILE}"; then
+    sed -i.bak "s/^DOCKER_GID=.*/DOCKER_GID=${DOCKER_GID}/" "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
+  else
     echo "DOCKER_GID=${DOCKER_GID}" >> "${ENV_FILE}"
-    echo "==> [02] appended DOCKER_GID=${DOCKER_GID} to existing .env"
   fi
+  echo "==> [02] DOCKER_GID set to ${DOCKER_GID} (host docker group)"
   # FLASH_VERSION may change between ships — keep it in sync with flash.version.
   if grep -q '^FLASH_VERSION=' "${ENV_FILE}"; then
     sed -i.bak "s/^FLASH_VERSION=.*/FLASH_VERSION=${FLASH_VERSION}/" "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
