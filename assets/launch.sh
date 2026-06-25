@@ -38,10 +38,13 @@ retag_strategy_runtime() {
   ver="$(grep -E '^FLASH_VERSION=' .env | cut -d= -f2)"
   ver="${ver:-latest}"
   local src="ghcr.io/learn-trade-org/flash-strategy-runtime:${ver}"
-  if docker image inspect "${src}" >/dev/null 2>&1; then
-    docker tag "${src}" flash-strategy-runtime:latest
-    echo "==> retagged ${src} -> flash-strategy-runtime:latest"
-  fi
+  # The runtime image is NOT a compose service (the backend launches it ad-hoc
+  # via the docker socket), so `compose pull` never fetches it — pull it here.
+  # Pulled ONCE and shared by every strategy container (deps baked in).
+  echo "==> pulling ${src}"
+  docker pull "${src}"
+  docker tag "${src}" flash-strategy-runtime:latest
+  echo "==> retagged ${src} -> flash-strategy-runtime:latest"
 }
 
 ACTION="${1:-}"
