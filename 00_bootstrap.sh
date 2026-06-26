@@ -14,6 +14,7 @@
 #   01b_registry_login.sh   docker login ghcr.io (read token — for private pull)
 #   02_gen_env.sh           write flash/.env  (app:7200, mongo:7220, pin 123456)
 #   03_compose_up.sh        pull images + docker compose up (no build)
+#   05_install_updater.sh   materialize sibling bin/ + cron (nightly auto-update)
 #
 # Idempotent: re-running is safe — docker install skips if present, .env is
 # never clobbered, flash/ assets are refreshed, compose up re-pulls in place.
@@ -40,6 +41,7 @@ bash "${SCRIPT_DIR}/01_install_host.sh"
 bash "${SCRIPT_DIR}/01b_registry_login.sh"
 bash "${SCRIPT_DIR}/02_gen_env.sh"
 bash "${SCRIPT_DIR}/03_compose_up.sh"
+bash "${SCRIPT_DIR}/05_install_updater.sh"
 
 echo
 echo "==> bootstrap complete."
