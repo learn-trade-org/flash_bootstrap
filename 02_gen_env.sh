@@ -50,6 +50,15 @@ if [ -f "${ENV_FILE}" ]; then
     echo "FLASH_VERSION=${FLASH_VERSION}" >> "${ENV_FILE}"
   fi
   echo "==> [02] FLASH_VERSION pinned to ${FLASH_VERSION}"
+  # FLASH_DIR — the host path of this runtime dir. The updater mounts it at the
+  # SAME path so compose's relative binds + ${PWD} resolve to host paths. Host-
+  # derived (not a cred), so reconcile it on every run.
+  if grep -q '^FLASH_DIR=' "${ENV_FILE}"; then
+    sed -i.bak "s#^FLASH_DIR=.*#FLASH_DIR=${FLASH_DIR}#" "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
+  else
+    echo "FLASH_DIR=${FLASH_DIR}" >> "${ENV_FILE}"
+  fi
+  echo "==> [02] FLASH_DIR set to ${FLASH_DIR}"
   exit 0
 fi
 
@@ -67,6 +76,7 @@ MONGO_HOST_PORT=7220
 ADMIN_INITIAL_PIN=123456
 DOCKER_GID=${DOCKER_GID}
 FLASH_VERSION=${FLASH_VERSION}
+FLASH_DIR=${FLASH_DIR}
 EOF
 
 chmod 600 "${ENV_FILE}"

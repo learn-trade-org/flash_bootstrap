@@ -22,7 +22,7 @@ if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
 # Only DATA + .env need aligning now — there's no backend/frontend source on
 # the box anymore (code is baked into the pulled images).
 echo "==> [03] preparing data dirs (mkdir db/* + chown -> 1000:1000)"
-mkdir -p "${FLASH_DIR}/db/mongo" "${FLASH_DIR}/db/strategy" "${FLASH_DIR}/db/strategy/.logs" "${FLASH_DIR}/db/tick" "${FLASH_DIR}/db/instrument"
+mkdir -p "${FLASH_DIR}/db/mongo" "${FLASH_DIR}/db/strategy" "${FLASH_DIR}/db/strategy/.logs" "${FLASH_DIR}/db/tick" "${FLASH_DIR}/db/instrument" "${FLASH_DIR}/db/update"
 $SUDO chown -R 1000:1000 "${FLASH_DIR}/db"
 $SUDO chown 1000:1000 "${FLASH_DIR}/.env"
 

@@ -50,6 +50,20 @@ services:
       - ./db/instrument:/app/instrument
       - ./db/tick:/app/tick
       - ./db/strategy:/app/strategy
+      - ./db/update:/app/update
       # Strategy-container engine: drive the host daemon to run sibling
       # flash-strategy-runtime containers.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  updater:
+    image: ghcr.io/learn-trade-org/flash-updater:${FLASH_VERSION:-latest}
+    container_name: flash_updater
+    restart: unless-stopped
+    working_dir: ${FLASH_DIR:?FLASH_DIR must be set in .env}
+    environment:
+      FLASH_DIR: ${FLASH_DIR:?FLASH_DIR must be set in .env}
+      COMPOSE_FILE: docker-compose.customer.yml
+    volumes:
+      # Same host path inside the container so compose's ./db/* binds + ${PWD} resolve to host paths.
+      - ${FLASH_DIR:?FLASH_DIR must be set in .env}:${FLASH_DIR:?FLASH_DIR must be set in .env}
       - /var/run/docker.sock:/var/run/docker.sock
