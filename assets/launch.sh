@@ -28,7 +28,7 @@ APP_PORT="${APP_PORT:-7200}"
 
 # Pre-create bind sources so the docker daemon doesn't auto-create them
 # root-owned (else uid-1000 app/mongo hit EACCES writing db/*).
-mkdir -p db/mongo db/strategy db/strategy/.logs db/tick db/instrument
+mkdir -p db/mongo db/strategy db/strategy/.logs db/tick db/instrument db/update
 
 # The backend launches strategy containers by the FIXED local name
 # `flash-strategy-runtime:latest` (container_high_level.ts). The pulled image is
