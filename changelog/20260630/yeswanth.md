@@ -1,17 +1,18 @@
 # 2026-06-30
 
-## Server maintenance layer — 4 GB swap, run at bootstrap + nightly (branch `yeswanth/server_maintenance`)
+## Free auto-HTTPS per droplet — Caddy + nip.io (branch `yeswanth/caddy_https_00`)
 
-A host-level **convergence layer** so already-installed boxes pick up host fixes (not just image updates).
+Every droplet gets a real Let's Encrypt cert with **no domain to buy and nothing to maintain** (issue #595).
 
 ```
-04_server_maintenance.sh → server_maintenance/00_main.sh → 01_add_swap.sh
-called by:  00_bootstrap.sh (provision)   bin/00_main.sh (nightly, after git pull)
+browser ─:443 TLS─► caddy ─:10600 HTTP─► app      (same flash_default net)
+   https://64-227-176-211.nip.io        plain HTTP internally
 ```
 
-- `server_maintenance/00_main.sh` runs tasks with **explicit calls** (no loop, for readability), each wrapped `|| log` so one failure never blocks the rest.
-- `01_add_swap.sh` — **4 GB** swapfile, idempotent (skips if swap already active), persisted in `/etc/fstab`, `vm.swappiness=10`. Fixes OOM on the 1 GB droplets during instrument refresh.
-- `04_server_maintenance.sh` is the numbered bootstrap step that delegates to the folder's `00_main.sh`.
-- Tasks + runner ship via `git pull`; the one-line hook in `bin/00_main` rides the self-refresh → one-time one-night lag on existing boxes, then every future task runs the next night. Add a fix = drop a `server_maintenance/0N_*.sh` + one explicit line.
+- `assets/Caddyfile` — `{$FLASH_HOSTNAME} { reverse_proxy app:10600 }`. A **real hostname** is the whole trick: Caddy auto-enables HTTPS, runs ACME HTTP-01 on `:80`, binds `:443`, auto-renews. Certs persist in the `caddy_data` volume.
+- `assets/docker-compose.customer.yml` — new `caddy` service (ports `80`/`443`, `caddy_data`/`caddy_config` volumes). **No `app→caddy` depends_on**: a broken hostname keeps caddy down but leaves mongo+app serving on `:7200` (HTTPS is additive, not load-bearing).
+- `02_gen_env.sh` — detects the droplet's **public IPv4** (DO metadata → `ifconfig.me` fallback; never the private/anchor IP), writes `FLASH_HOSTNAME=<ip-dashed>.nip.io`. Reconciled each run like `DOCKER_GID`; skipped (warn) if detection fails.
+- `00_bootstrap.sh` + `update/01_image_pull.sh` — copy `Caddyfile` into `flash/`. The updater path is **required**, not optional: it already ships the new compose that mounts `./Caddyfile`, so the file must ride along or existing boxes break.
+- nip.io is the default (issue comment); sslip.io stays a manual fallback (separate LE rate-limit bucket). Plain `:7200` kept open — additive rollout.
 
-Exec bits `100755`; syntax-checked. Real swap runs Linux-only (uses `swapon`/`mkswap`/`fallocate`).
+Requires ports **80 + 443** open inbound. Bash syntax-checked; `docker compose config` validates; hostname transform verified.

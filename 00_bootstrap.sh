@@ -35,6 +35,7 @@ echo "==> FLASH bootstrap (runtime dir ${FLASH_DIR})"
 mkdir -p "${FLASH_DIR}"
 cp "${SCRIPT_DIR}/assets/docker-compose.customer.yml" "${FLASH_DIR}/docker-compose.customer.yml"
 cp "${SCRIPT_DIR}/assets/launch.sh" "${FLASH_DIR}/launch.sh"
+cp "${SCRIPT_DIR}/assets/Caddyfile" "${FLASH_DIR}/Caddyfile"
 chmod +x "${FLASH_DIR}/launch.sh"
 echo "==> [00] generated ${FLASH_DIR} from assets/"
 
