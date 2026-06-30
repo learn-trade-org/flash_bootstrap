@@ -31,4 +31,8 @@ $SUDO bash "${FLASH_DIR}/launch.sh" start
 
 echo
 echo "==> [03] FLASH starting on http://$(hostname -I | awk '{print $1}'):7200"
+FLASH_HOSTNAME="$(grep -E '^FLASH_HOSTNAME=' "${FLASH_DIR}/.env" | cut -d= -f2)"
+if [ -n "${FLASH_HOSTNAME}" ]; then
+  echo "    secure: https://${FLASH_HOSTNAME}/   (cert issues on first request, ~30s)"
+fi
 echo "    login: admin / 123456   (first pull may take a minute)"

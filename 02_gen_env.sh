@@ -33,6 +33,21 @@ DOCKER_GID="${DOCKER_GID:-999}"
 FLASH_VERSION="$(cat "$(dirname "$0")/flash.version" 2>/dev/null | tr -d '[:space:]')"
 FLASH_VERSION="${FLASH_VERSION:-latest}"
 
+# FLASH_HOSTNAME — public DNS name Caddy obtains a Let's Encrypt cert for. The
+# droplet's PUBLIC IPv4 in dashed form via the free nip.io resolver
+# (64.227.176.211 -> 64-227-176-211.nip.io). Source order matters: DO metadata
+# is authoritative on a droplet; ifconfig.me is the off-DO fallback. We must NOT
+# pick the host's private/anchor IP (hostname -I), which the internet can't reach.
+detect_public_ip() {
+  local ip
+  ip="$(curl -s --max-time 3 http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address 2>/dev/null)"
+  if [ -z "${ip}" ]; then ip="$(curl -s --max-time 5 https://ifconfig.me 2>/dev/null)"; fi
+  echo "${ip}"
+}
+PUBLIC_IP="$(detect_public_ip)"
+FLASH_HOSTNAME=""
+if [ -n "${PUBLIC_IP}" ]; then FLASH_HOSTNAME="${PUBLIC_IP//./-}.nip.io"; fi
+
 if [ -f "${ENV_FILE}" ]; then
   echo "==> [02] ${ENV_FILE} already exists — leaving creds untouched."
   # DOCKER_GID is host-derived, not a cred — reconcile it to the detected value
@@ -50,6 +65,19 @@ if [ -f "${ENV_FILE}" ]; then
     echo "FLASH_VERSION=${FLASH_VERSION}" >> "${ENV_FILE}"
   fi
   echo "==> [02] FLASH_VERSION pinned to ${FLASH_VERSION}"
+  # FLASH_HOSTNAME is IP-derived, not a cred — reconcile each run so a box that
+  # changes IP (or predates HTTPS) gets the right hostname. Skip if detection
+  # failed (empty) rather than clobbering a known-good value with nothing.
+  if [ -n "${FLASH_HOSTNAME}" ]; then
+    if grep -q '^FLASH_HOSTNAME=' "${ENV_FILE}"; then
+      sed -i.bak "s/^FLASH_HOSTNAME=.*/FLASH_HOSTNAME=${FLASH_HOSTNAME}/" "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
+    else
+      echo "FLASH_HOSTNAME=${FLASH_HOSTNAME}" >> "${ENV_FILE}"
+    fi
+    echo "==> [02] FLASH_HOSTNAME set to ${FLASH_HOSTNAME}"
+  else
+    echo "==> [02] WARNING: could not detect public IP — HTTPS hostname unset"
+  fi
   exit 0
 fi
 
@@ -67,6 +95,7 @@ MONGO_HOST_PORT=7220
 ADMIN_INITIAL_PIN=123456
 DOCKER_GID=${DOCKER_GID}
 FLASH_VERSION=${FLASH_VERSION}
+FLASH_HOSTNAME=${FLASH_HOSTNAME}
 EOF
 
 chmod 600 "${ENV_FILE}"

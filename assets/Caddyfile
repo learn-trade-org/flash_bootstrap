@@ -1,0 +1,6 @@
+# {$FLASH_HOSTNAME} is the droplet's public IP as <ip-dashed>.nip.io, set in
+# .env by 02_gen_env.sh. A real hostname makes Caddy auto-issue a Let's Encrypt
+# cert; `app` is the compose service, plain HTTP internally on 10600.
+{$FLASH_HOSTNAME} {
+    reverse_proxy app:10600
+}

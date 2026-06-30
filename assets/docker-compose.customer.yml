@@ -53,3 +53,26 @@ services:
       # Strategy-container engine: drive the host daemon to run sibling
       # flash-strategy-runtime containers.
       - /var/run/docker.sock:/var/run/docker.sock
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: flash_caddy
+    restart: unless-stopped
+    # No app->caddy depends_on: a broken hostname keeps caddy down but leaves
+    # mongo+app serving on :7200 (HTTPS is additive, not load-bearing).
+    depends_on:
+      - app
+    environment:
+      FLASH_HOSTNAME: ${FLASH_HOSTNAME:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Persist issued certs across restarts → reuse, no LE rate-limit hits.
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
