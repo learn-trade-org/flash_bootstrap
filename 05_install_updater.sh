@@ -35,6 +35,8 @@ chmod +x "${BIN_DIR}"/*.sh
 # so NO editor prompt. Idempotent: drop any prior flash_update line, then append the current one.
 echo "==> [05] registering cron (00:00 UTC daily) in root's crontab"
 CRON_LINE="0 0 * * * ${BIN_DIR}/00_main.sh >> ${BIN_DIR}/flash_update.log 2>&1 # flash_update"
-( $SUDO crontab -l 2>/dev/null | grep -v 'flash_update' ; echo "${CRON_LINE}" ) | $SUDO crontab -
+# `|| true`: with no existing crontab, `crontab -l | grep -v` exits non-zero and set -e would abort
+# the subshell BEFORE the echo, piping an empty crontab. Swallow it so the new line is always written.
+( $SUDO crontab -l 2>/dev/null | grep -v 'flash_update' || true ; echo "${CRON_LINE}" ) | $SUDO crontab -
 
 echo "==> [05] updater installed → 'crontab -l' shows the job, logs ${BIN_DIR}/flash_update.log"
