@@ -1,7 +1,7 @@
 #!/bin/bash
 # [05] Install the nightly auto-updater. Materializes a stable sibling bin/ (never git-pulled, so a
 # pull can't rewrite a running script) with the update scripts, and registers a cron job that runs
-# bin/00_main.sh at 00:00 UTC. Idempotent: re-running refreshes bin/ and rewrites the cron file.
+# bin/00_main.sh at 00:00 UTC via root's crontab. Idempotent: re-running refreshes bin/ and the line.
 #
 # Run by 00_bootstrap.sh, or standalone.
 set -e
@@ -31,11 +31,10 @@ mkdir -p "${BIN_DIR}"
 cp "${SCRIPT_DIR}"/update/*.sh "${BIN_DIR}/"
 chmod +x "${BIN_DIR}"/*.sh
 
-echo "==> [05] registering cron (00:00 UTC daily)"
-$SUDO tee /etc/cron.d/flash_update >/dev/null <<EOF
-# FLASH nightly auto-update — pull the new flash.version + images and redeploy.
-0 0 * * * root ${BIN_DIR}/00_main.sh >> ${BIN_DIR}/flash_update.log 2>&1
-EOF
-$SUDO chmod 644 /etc/cron.d/flash_update
+# Install into root's crontab (visible via `crontab -l`). Non-interactive — piped to `crontab -`,
+# so NO editor prompt. Idempotent: drop any prior flash_update line, then append the current one.
+echo "==> [05] registering cron (00:00 UTC daily) in root's crontab"
+CRON_LINE="0 0 * * * ${BIN_DIR}/00_main.sh >> ${BIN_DIR}/flash_update.log 2>&1 # flash_update"
+( $SUDO crontab -l 2>/dev/null | grep -v 'flash_update' ; echo "${CRON_LINE}" ) | $SUDO crontab -
 
-echo "==> [05] updater installed → cron 00:00 UTC, logs ${BIN_DIR}/flash_update.log"
+echo "==> [05] updater installed → 'crontab -l' shows the job, logs ${BIN_DIR}/flash_update.log"
