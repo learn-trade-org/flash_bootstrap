@@ -17,6 +17,6 @@ flash_bootstrap/   (this installer — cloned)     flash/   (generated at runtim
 2. `cd flash_bootstrap`
 3. `GHCR_USER=<github-user> GHCR_TOKEN=<read:packages PAT> ./00_bootstrap.sh`
 
-→ FLASH live on `:7200` (admin / 123456). Data persists in `flash/db/*`; upgrades just `./launch.sh pull && ./launch.sh start` — data survives.
+→ FLASH live on `:7200` (login `admin` / the PIN in `flash/.env` `ADMIN_PIN` — set via the env var at bootstrap, default `123456` for local runs). Data persists in `flash/db/*`; upgrades just `./launch.sh pull && ./launch.sh start` — data survives.
 
 **Owner side:** build + push the images from the private flash repo with `container/publish.sh`, then bump `flash.version` here to the shipped tag.

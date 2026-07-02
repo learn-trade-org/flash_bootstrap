@@ -92,11 +92,11 @@ MONGO_HOST=mongo
 MONGO_PORT=27017
 APP_HOST_PORT=7200
 MONGO_HOST_PORT=7220
-ADMIN_INITIAL_PIN=123456
+ADMIN_PIN=${ADMIN_PIN:-123456}
 DOCKER_GID=${DOCKER_GID}
 FLASH_VERSION=${FLASH_VERSION}
 FLASH_HOSTNAME=${FLASH_HOSTNAME}
 EOF
 
 chmod 600 "${ENV_FILE}"
-echo "==> [02] wrote .env (app:7200  mongo:7220  admin pin:123456  v:${FLASH_VERSION})"
+echo "==> [02] wrote .env (app:7200  mongo:7220  admin pin: see deploy screen or ADMIN_PIN in .env  v:${FLASH_VERSION})"

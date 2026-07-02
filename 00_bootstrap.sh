@@ -12,7 +12,7 @@
 # Orchestrates, in order (each step is its own script, standalone-runnable):
 #   01_install_host.sh      apt prereqs + docker engine + compose plugin
 #   01b_registry_login.sh   docker login ghcr.io (read token — for private pull)
-#   02_gen_env.sh           write flash/.env  (app:7200, mongo:7220, pin 123456)
+#   02_gen_env.sh           write flash/.env  (app:7200, mongo:7220, pin from ADMIN_PIN)
 #   03_compose_up.sh        pull images + docker compose up (no build)
 #   04_server_maintenance.sh  run host tasks (server_maintenance/00_main.sh → e.g. swap)
 #   05_install_updater.sh   materialize sibling bin/ + cron (nightly auto-update)
