@@ -45,7 +45,7 @@ services:
       - "${APP_HOST_PORT:-10600}:10600"
     volumes:
       # Secrets only — code is baked into the image (no ./backend, ./frontend).
-      - ./.env:/app/.env:ro
+      - ./.env:/app/.env:rw          # writable: change-pin mirrors ADMIN_PIN back for SSH recovery
       # Runtime data — survives image destroy/upgrade (one-truth on the host).
       - ./db/instrument:/app/instrument
       - ./db/tick:/app/tick
