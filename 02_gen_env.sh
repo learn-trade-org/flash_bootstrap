@@ -27,11 +27,23 @@ ENV_FILE="${FLASH_DIR}/.env"
 DOCKER_GID="$(getent group docker | cut -d: -f3)"
 DOCKER_GID="${DOCKER_GID:-999}"
 
-# FLASH_VERSION — the image tag the customer compose pulls. Pinned in the
-# flash_bootstrap/flash.version file (owner bumps it per ship); falls back to
-# `latest`. docker compose reads ${FLASH_VERSION} from this .env automatically.
-FLASH_VERSION="$(cat "$(dirname "$0")/flash.version" 2>/dev/null | tr -d '[:space:]')"
-FLASH_VERSION="${FLASH_VERSION:-latest}"
+# Compose pins images by digest; this seeds the initial pin, the hangar updater owns it after.
+if ! command -v jq >/dev/null 2>&1; then
+  JQ_SUDO=""; if [ "$(id -u)" -ne 0 ]; then JQ_SUDO="sudo"; fi
+  $JQ_SUDO apt-get update -y >/dev/null 2>&1 || true
+  $JQ_SUDO apt-get install -y jq >/dev/null 2>&1 || true
+fi
+MANIFEST_FILE="$(cd "$(dirname "$0")" && pwd)/releases/manifest.json"
+FLASH_CHANNEL="${FLASH_CHANNEL:-stable}"
+FLASH_VERSION="$(jq -r ".channels.\"${FLASH_CHANNEL}\".flashVersion // empty" "${MANIFEST_FILE}" 2>/dev/null)"
+FLASH_APP_DIGEST="$(jq -r ".channels.\"${FLASH_CHANNEL}\".imageDigestMap.\"flash-app\" // empty" "${MANIFEST_FILE}" 2>/dev/null)"
+FLASH_MONGO_DIGEST="$(jq -r ".channels.\"${FLASH_CHANNEL}\".imageDigestMap.\"flash-mongo\" // empty" "${MANIFEST_FILE}" 2>/dev/null)"
+FLASH_STRATEGY_DIGEST="$(jq -r ".channels.\"${FLASH_CHANNEL}\".imageDigestMap.\"flash-strategy-runtime\" // empty" "${MANIFEST_FILE}" 2>/dev/null)"
+FLASH_STRATEGY_BUN_DIGEST="$(jq -r ".channels.\"${FLASH_CHANNEL}\".imageDigestMap.\"flash-strategy-runtime-bun\" // empty" "${MANIFEST_FILE}" 2>/dev/null)"
+if [ -z "${FLASH_VERSION}" ] || [ -z "${FLASH_APP_DIGEST}" ] || [ -z "${FLASH_MONGO_DIGEST}" ]; then
+  echo "==> [02] ERROR: releases/manifest.json missing or channel '${FLASH_CHANNEL}' unreadable — cannot pin images" >&2
+  exit 1
+fi
 
 # FLASH_HOSTNAME — public DNS name Caddy obtains a Let's Encrypt cert for. The
 # droplet's PUBLIC IPv4 in dashed form via the free nip.io resolver
@@ -58,13 +70,22 @@ if [ -f "${ENV_FILE}" ]; then
     echo "DOCKER_GID=${DOCKER_GID}" >> "${ENV_FILE}"
   fi
   echo "==> [02] DOCKER_GID set to ${DOCKER_GID} (host docker group)"
-  # FLASH_VERSION may change between ships — keep it in sync with flash.version.
-  if grep -q '^FLASH_VERSION=' "${ENV_FILE}"; then
-    sed -i.bak "s/^FLASH_VERSION=.*/FLASH_VERSION=${FLASH_VERSION}/" "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
-  else
-    echo "FLASH_VERSION=${FLASH_VERSION}" >> "${ENV_FILE}"
+  if ! grep -q '^FLASH_CHANNEL=' "${ENV_FILE}"; then
+    echo "FLASH_CHANNEL=${FLASH_CHANNEL}" >> "${ENV_FILE}"
+    echo "==> [02] FLASH_CHANNEL seeded as ${FLASH_CHANNEL}"
   fi
-  echo "==> [02] FLASH_VERSION pinned to ${FLASH_VERSION}"
+  # Seed-if-absent only: once present, the hangar updater is the single writer for these keys.
+  for pinKey in FLASH_VERSION FLASH_APP_DIGEST FLASH_MONGO_DIGEST FLASH_STRATEGY_DIGEST FLASH_STRATEGY_BUN_DIGEST; do
+    pinValue="$(eval "echo \${${pinKey}}")"
+    if [ -n "${pinValue}" ] && ! grep -q "^${pinKey}=" "${ENV_FILE}"; then
+      echo "${pinKey}=${pinValue}" >> "${ENV_FILE}"
+      echo "==> [02] ${pinKey} seeded from manifest (${FLASH_CHANNEL})"
+    fi
+  done
+  if grep -q '^FLASH_VERSION=latest$' "${ENV_FILE}"; then
+    sed -i.bak "s/^FLASH_VERSION=latest$/FLASH_VERSION=${FLASH_VERSION}/" "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
+    echo "==> [02] FLASH_VERSION migrated latest → ${FLASH_VERSION}"
+  fi
   # FLASH_HOSTNAME is IP-derived, not a cred — reconcile each run so a box that
   # changes IP (or predates HTTPS) gets the right hostname. Skip if detection
   # failed (empty) rather than clobbering a known-good value with nothing.
@@ -94,7 +115,12 @@ APP_HOST_PORT=7200
 MONGO_HOST_PORT=7220
 ADMIN_PIN=${ADMIN_PIN:-123456}
 DOCKER_GID=${DOCKER_GID}
+FLASH_CHANNEL=${FLASH_CHANNEL}
 FLASH_VERSION=${FLASH_VERSION}
+FLASH_APP_DIGEST=${FLASH_APP_DIGEST}
+FLASH_MONGO_DIGEST=${FLASH_MONGO_DIGEST}
+FLASH_STRATEGY_DIGEST=${FLASH_STRATEGY_DIGEST}
+FLASH_STRATEGY_BUN_DIGEST=${FLASH_STRATEGY_BUN_DIGEST}
 FLASH_HOSTNAME=${FLASH_HOSTNAME}
 EOF
 

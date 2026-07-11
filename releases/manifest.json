@@ -1,0 +1,32 @@
+{
+  "manifestSchemaVersion": 1,
+  "author": "yeswanth",
+  "reason": "seed manifest — pin fleet to 0.2.24 (first digest-pinned release, replaces :latest)",
+  "publishedAt": "2026-07-11T12:00:00Z",
+  "channels": {
+    "canary": {
+      "flashVersion": "0.2.24",
+      "imageDigestMap": {
+        "flash-app": "sha256:0b56b21b9a3bb4e27197443aee34dc899041b218f9e430200aa994c2fca37340",
+        "flash-mongo": "sha256:cb702ec53c10e25f4629e8538d43aa0c3888da2d0b264ac4c956d623b0667f39",
+        "flash-strategy-runtime": "sha256:c1d8812468610eb890d7ad5c152c4ee80acb9f6f9fdfc79da4cb7c10f0a12bd8",
+        "flash-strategy-runtime-bun": null
+      },
+      "minCompatibleDataVersion": "0.2.20",
+      "releaseNotesRef": "changelog/20260708/yeswanth.md",
+      "promotedAt": null
+    },
+    "stable": {
+      "flashVersion": "0.2.24",
+      "imageDigestMap": {
+        "flash-app": "sha256:0b56b21b9a3bb4e27197443aee34dc899041b218f9e430200aa994c2fca37340",
+        "flash-mongo": "sha256:cb702ec53c10e25f4629e8538d43aa0c3888da2d0b264ac4c956d623b0667f39",
+        "flash-strategy-runtime": "sha256:c1d8812468610eb890d7ad5c152c4ee80acb9f6f9fdfc79da4cb7c10f0a12bd8",
+        "flash-strategy-runtime-bun": null
+      },
+      "minCompatibleDataVersion": "0.2.20",
+      "releaseNotesRef": "changelog/20260708/yeswanth.md",
+      "promotedAt": "2026-07-11T12:00:00Z"
+    }
+  }
+}
