@@ -21,9 +21,11 @@ INITIATOR="${FLASH_UPDATE_INITIATOR:-CRON}"
 source "${BIN_DIR}/lib_audit.sh"
 source "${BIN_DIR}/lib_manifest.sh"
 source "${BIN_DIR}/lib_health.sh"
+if [ -f "${BIN_DIR}/lib_fleet.sh" ]; then source "${BIN_DIR}/lib_fleet.sh"; fi
 
 audit_init "${STATE_DIR}"
-trap audit_finish EXIT
+# Heartbeat is fire-and-forget — a dead registry must never fail the run.
+trap 'audit_finish; type fleet_send_heartbeat_after_run >/dev/null 2>&1 && fleet_send_heartbeat_after_run || true' EXIT
 
 fail_count_bump() {
   local currentCount
