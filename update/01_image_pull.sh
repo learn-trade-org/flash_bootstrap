@@ -16,4 +16,6 @@ cp assets/docker-compose.customer.yml assets/launch.sh assets/Caddyfile "${FLASH
 bash 02_gen_env.sh
 
 cd "${FLASH_DIR}"
-docker compose -f docker-compose.customer.yml pull
+# Reuse launch.sh `pull` (compose pull + retag BOTH strategy runtimes) so nightly boxes also
+# fetch the python AND bun runtime images — plain `compose pull` skips them (not compose services).
+bash "${FLASH_DIR}/launch.sh" pull

@@ -37,14 +37,25 @@ retag_strategy_runtime() {
   local ver
   ver="$(grep -E '^FLASH_VERSION=' .env | cut -d= -f2)"
   ver="${ver:-latest}"
-  local src="ghcr.io/learn-trade-org/flash-strategy-runtime:${ver}"
-  # The runtime image is NOT a compose service (the backend launches it ad-hoc
-  # via the docker socket), so `compose pull` never fetches it — pull it here.
-  # Pulled ONCE and shared by every strategy container (deps baked in).
-  echo "==> pulling ${src}"
-  docker pull "${src}"
-  docker tag "${src}" flash-strategy-runtime:latest
-  echo "==> retagged ${src} -> flash-strategy-runtime:latest"
+
+  # Both runtimes are launched ad-hoc by the backend via the docker socket, so they are NOT
+  # compose services and `compose pull` never fetches them — pull + retag them here.
+  local python_src="ghcr.io/learn-trade-org/flash-strategy-runtime:${ver}"
+  echo "==> pulling ${python_src}"
+  docker pull "${python_src}"
+  docker tag "${python_src}" flash-strategy-runtime:latest
+  echo "==> retagged ${python_src} -> flash-strategy-runtime:latest"
+
+  # Bun runtime is best-effort: a box pinned to a version that predates the bun image must still
+  # start (python strategies keep working) — only bun strategies wait until it is published.
+  local bun_src="ghcr.io/learn-trade-org/flash-strategy-runtime-bun:${ver}"
+  echo "==> pulling ${bun_src}"
+  if docker pull "${bun_src}"; then
+    docker tag "${bun_src}" flash-strategy-runtime-bun:latest
+    echo "==> retagged ${bun_src} -> flash-strategy-runtime-bun:latest"
+  else
+    echo "==> WARN ${bun_src} unavailable — bun strategies will not run until it is published"
+  fi
 }
 
 ACTION="${1:-}"
