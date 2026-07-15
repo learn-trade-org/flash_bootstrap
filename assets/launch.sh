@@ -28,33 +28,44 @@ APP_PORT="${APP_PORT:-7200}"
 
 # Pre-create bind sources so the docker daemon doesn't auto-create them
 # root-owned (else uid-1000 app/mongo hit EACCES writing db/*).
-mkdir -p db/mongo db/strategy db/strategy/.logs db/tick db/instrument
+mkdir -p db/mongo db/strategy db/strategy/.logs db/tick db/instrument updater_state
 
 # The backend launches strategy containers by the FIXED local name
 # `flash-strategy-runtime:latest` (container_high_level.ts). The pulled image is
 # tagged with the GHCR path, so retag it to the name the backend expects.
+#
+# Pulled BY DIGEST (FLASH_STRATEGY_DIGEST/_BUN_DIGEST from .env), same rule as
+# app/mongo in the compose file — a mutable :tag here would defeat digest-pinning
+# for the one pair of images that don't go through compose at all.
 retag_strategy_runtime() {
-  local ver
-  ver="$(grep -E '^FLASH_VERSION=' .env | cut -d= -f2)"
-  ver="${ver:-latest}"
+  local strategyDigest bunDigest
 
-  # Both runtimes are launched ad-hoc by the backend via the docker socket, so they are NOT
-  # compose services and `compose pull` never fetches them — pull + retag them here.
-  local python_src="ghcr.io/learn-trade-org/flash-strategy-runtime:${ver}"
-  echo "==> pulling ${python_src}"
-  docker pull "${python_src}"
-  docker tag "${python_src}" flash-strategy-runtime:latest
-  echo "==> retagged ${python_src} -> flash-strategy-runtime:latest"
+  strategyDigest="$(grep -E '^FLASH_STRATEGY_DIGEST=' .env | cut -d= -f2)"
+  bunDigest="$(grep -E '^FLASH_STRATEGY_BUN_DIGEST=' .env | cut -d= -f2)"
+
+  if [ -n "${strategyDigest}" ]; then
+    local pythonSrc="ghcr.io/learn-trade-org/flash-strategy-runtime@${strategyDigest}"
+    echo "==> pulling ${pythonSrc}"
+    docker pull "${pythonSrc}"
+    docker tag "${pythonSrc}" flash-strategy-runtime:latest
+    echo "==> retagged ${pythonSrc} -> flash-strategy-runtime:latest"
+  else
+    echo "==> WARN FLASH_STRATEGY_DIGEST unset — python strategies will not run"
+  fi
 
   # Bun runtime is best-effort: a box pinned to a version that predates the bun image must still
   # start (python strategies keep working) — only bun strategies wait until it is published.
-  local bun_src="ghcr.io/learn-trade-org/flash-strategy-runtime-bun:${ver}"
-  echo "==> pulling ${bun_src}"
-  if docker pull "${bun_src}"; then
-    docker tag "${bun_src}" flash-strategy-runtime-bun:latest
-    echo "==> retagged ${bun_src} -> flash-strategy-runtime-bun:latest"
+  if [ -n "${bunDigest}" ]; then
+    local bunSrc="ghcr.io/learn-trade-org/flash-strategy-runtime-bun@${bunDigest}"
+    echo "==> pulling ${bunSrc}"
+    if docker pull "${bunSrc}"; then
+      docker tag "${bunSrc}" flash-strategy-runtime-bun:latest
+      echo "==> retagged ${bunSrc} -> flash-strategy-runtime-bun:latest"
+    else
+      echo "==> WARN ${bunSrc} unavailable — bun strategies will not run until it is published"
+    fi
   else
-    echo "==> WARN ${bun_src} unavailable — bun strategies will not run until it is published"
+    echo "==> WARN FLASH_STRATEGY_BUN_DIGEST unset — bun strategies will not run"
   fi
 }
 

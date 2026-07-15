@@ -13,7 +13,8 @@ services:
   mongo:
     # Baked image — bootstrap scripts (entrypoint.sh + init.js) are COPYed in,
     # not mounted, so the customer box needs no ./container/mongo source.
-    image: ghcr.io/learn-trade-org/flash-mongo:${FLASH_VERSION:-latest}
+    # Digest-pinned: .env digest keys are written only by 02_gen_env.sh seed + flash-updater.
+    image: ghcr.io/learn-trade-org/flash-mongo@${FLASH_MONGO_DIGEST:?FLASH_MONGO_DIGEST must be set in .env — run 02_gen_env.sh}
     container_name: flash_db
     restart: unless-stopped
     user: "1000:1000"
@@ -29,8 +30,8 @@ services:
       - ./db/mongo:/data/db
 
   app:
-    # Baked image pulled from GHCR — pinned to the published version by .env.
-    image: ghcr.io/learn-trade-org/flash-app:${FLASH_VERSION:-latest}
+    # Baked image pulled from GHCR — digest-pinned, same rule as mongo above.
+    image: ghcr.io/learn-trade-org/flash-app@${FLASH_APP_DIGEST:?FLASH_APP_DIGEST must be set in .env — run 02_gen_env.sh}
     container_name: flash_app
     restart: unless-stopped
     depends_on:
@@ -41,6 +42,9 @@ services:
       MONGO_HOST: mongo
       MONGO_PORT: "27017"
       HOST_STRATEGY_PATH: ${PWD}/db/strategy
+      # Strategy-runtime pins for app-created containers; empty → app's tag default.
+      FLASH_STRATEGY_DIGEST: ${FLASH_STRATEGY_DIGEST:-}
+      FLASH_STRATEGY_BUN_DIGEST: ${FLASH_STRATEGY_BUN_DIGEST:-}
     ports:
       - "${APP_HOST_PORT:-10600}:10600"
     volumes:
@@ -53,6 +57,26 @@ services:
       # Strategy-container engine: drive the host daemon to run sibling
       # flash-strategy-runtime containers.
       - /var/run/docker.sock:/var/run/docker.sock
+
+  # The ONLY other service holding docker.sock — its own image, no shared deps with app.
+  # Owns updates end-to-end: fetches the manifest from flashtrade.in, pulls by digest,
+  # health-gates, rolls back to a flat last_good.json if the gate fails.
+  updater:
+    image: ghcr.io/learn-trade-org/flash-updater@${FLASH_UPDATER_DIGEST:?FLASH_UPDATER_DIGEST must be set in .env — run 02_gen_env.sh}
+    container_name: flash_updater
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      FLASH_HOST_DIR: ${PWD}
+      FLASH_REGISTRY_URL: ${FLASH_REGISTRY_URL:-https://flashtrade.in}
+      FLEET_REGISTRATION_TOKEN: ${FLEET_REGISTRATION_TOKEN:-}
+      FLASH_UPDATE_INTERVAL_SECONDS: ${FLASH_UPDATE_INTERVAL_SECONDS:-86400}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:${PWD}                      # same absolute host path inside the container — docker.sock
+                                       # commands resolve bind mounts against the HOST, not this one
+      - ./updater_state:/state
 
   caddy:
     image: caddy:2-alpine
