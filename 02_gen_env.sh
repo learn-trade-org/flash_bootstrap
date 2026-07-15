@@ -146,6 +146,7 @@ if [ -f "${ENV_FILE}" ]; then
 
   # FLASH_CHANNEL + every digest key: seed-if-absent only. Once present, flash-updater
   # is the single writer — a bootstrap re-run must never fight its own update cycle.
+  env_seed_if_absent "FLASH_REGISTRY_URL" "${FLASH_REGISTRY_URL}"
   env_seed_if_absent "FLASH_CHANNEL" "${FLASH_CHANNEL}"
   env_seed_if_absent "FLASH_VERSION" "${FLASH_VERSION}"
   env_seed_if_absent "FLASH_APP_DIGEST" "${FLASH_APP_DIGEST}"
@@ -171,6 +172,7 @@ APP_HOST_PORT=7200
 MONGO_HOST_PORT=7220
 ADMIN_PIN=${ADMIN_PIN:-123456}
 DOCKER_GID=${DOCKER_GID}
+FLASH_REGISTRY_URL=${FLASH_REGISTRY_URL}
 FLASH_CHANNEL=${FLASH_CHANNEL}
 FLASH_VERSION=${FLASH_VERSION}
 FLASH_APP_DIGEST=${FLASH_APP_DIGEST}
