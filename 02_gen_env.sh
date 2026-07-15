@@ -41,6 +41,22 @@ install_jq_if_missing() {
   $sudoPrefix apt-get install -y jq >/dev/null 2>&1 || true
 }
 
+# Same idea as the old FLASH_BOOTSTRAP_BRANCH pattern: which registry/channel a box talks to is
+# derived from which branch THIS flash_bootstrap checkout is on, not a manual export every run.
+# FLASH_REGISTRY_URL / FLASH_CHANNEL env vars still win if explicitly set — this is only the default.
+detect_registry_defaults() {
+  local currentBranch
+  currentBranch="$(git -C "$(dirname "$0")" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")"
+
+  if [ "${currentBranch}" = "staging" ]; then
+    REGISTRY_URL_DEFAULT="https://ft1.kron.co.in"
+    CHANNEL_DEFAULT="canary"
+  else
+    REGISTRY_URL_DEFAULT="https://flashtrade.in"
+    CHANNEL_DEFAULT="stable"
+  fi
+}
+
 # Compose pins every image by digest, never a tag. This seeds the initial pin from
 # flashtrade.in's release_registry; flash-updater owns the keys after that.
 fetch_release_manifest() {
@@ -58,9 +74,10 @@ fetch_release_manifest() {
 }
 
 install_jq_if_missing
+detect_registry_defaults
 
-FLASH_CHANNEL="${FLASH_CHANNEL:-stable}"
-FLASH_REGISTRY_URL="${FLASH_REGISTRY_URL:-https://flashtrade.in}"
+FLASH_CHANNEL="${FLASH_CHANNEL:-${CHANNEL_DEFAULT}}"
+FLASH_REGISTRY_URL="${FLASH_REGISTRY_URL:-${REGISTRY_URL_DEFAULT}}"
 
 MANIFEST_RESPONSE="$(fetch_release_manifest "${FLASH_CHANNEL}" "${FLASH_REGISTRY_URL}")"
 
