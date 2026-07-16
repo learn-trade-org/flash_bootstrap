@@ -77,6 +77,9 @@ services:
       - .:${PWD}                      # same absolute host path inside the container — docker.sock
                                        # commands resolve bind mounts against the HOST, not this one
       - ./updater_state:/state
+      # Registry auth is CLI-side, not inherited from the host daemon over the socket — reuse the
+      # same GHCR login 01b_registry_login.sh already established, read-only.
+      - /root/.docker/config.json:/root/.docker/config.json:ro
 
   caddy:
     image: caddy:2-alpine
