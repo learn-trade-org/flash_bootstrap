@@ -32,6 +32,12 @@ export FLASH_DIR
 
 echo "==> FLASH bootstrap (runtime dir ${FLASH_DIR})"
 
+# One-click deploys export FLASH_PROGRESS_URL + FLASH_CLOUD_ID (cloud-init); manual runs skip silently.
+reportProgressStep() {
+  if [ -z "${FLASH_PROGRESS_URL:-}" ] || [ -z "${FLASH_CLOUD_ID:-}" ]; then return 0; fi
+  curl -s "${FLASH_PROGRESS_URL}?cloudId=${FLASH_CLOUD_ID}&step=$1" >/dev/null 2>&1 || true
+}
+
 # Materialize the runtime dir from assets — compose + launcher only, no source.
 mkdir -p "${FLASH_DIR}"
 cp "${SCRIPT_DIR}/assets/docker-compose.customer.yml" "${FLASH_DIR}/docker-compose.customer.yml"
@@ -40,11 +46,14 @@ cp "${SCRIPT_DIR}/assets/Caddyfile" "${FLASH_DIR}/Caddyfile"
 chmod +x "${FLASH_DIR}/launch.sh"
 echo "==> [00] generated ${FLASH_DIR} from assets/"
 
+reportProgressStep DOCKER
 bash "${SCRIPT_DIR}/01_install_host.sh"
 bash "${SCRIPT_DIR}/01b_registry_login.sh"
 bash "${SCRIPT_DIR}/02_gen_env.sh"
 bash "${SCRIPT_DIR}/02b_fleet_register.sh"
+reportProgressStep PULL
 bash "${SCRIPT_DIR}/03_compose_up.sh"
+reportProgressStep UP
 bash "${SCRIPT_DIR}/04_server_maintenance.sh"
 bash "${SCRIPT_DIR}/05_install_updater.sh"
 
