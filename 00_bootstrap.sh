@@ -16,7 +16,10 @@
 #   02b_fleet_register.sh   register in the flashtrade.in fleet registry (one-click only)
 #   03_compose_up.sh        pull images + docker compose up (no build)
 #   04_server_maintenance.sh  run host tasks (server_maintenance/00_main.sh → e.g. swap)
-#   05_install_updater.sh   materialize sibling bin/ + cron (nightly auto-update)
+#
+# Bootstrap is provision-once, then walks away — it carries NO update logic.
+# The running flash-updater container (part of the pulled stack) owns updates,
+# rollback, and versioning from here on; see flash repo's container/updater/.
 #
 # Idempotent: re-running is safe — docker install skips if present, .env is
 # never clobbered, flash/ assets are refreshed, compose up re-pulls in place.
@@ -55,7 +58,6 @@ reportProgressStep PULL
 bash "${SCRIPT_DIR}/03_compose_up.sh"
 reportProgressStep UP
 bash "${SCRIPT_DIR}/04_server_maintenance.sh"
-bash "${SCRIPT_DIR}/05_install_updater.sh"
 
 echo
 echo "==> bootstrap complete."

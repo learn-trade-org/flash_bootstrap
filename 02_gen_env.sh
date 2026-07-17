@@ -27,11 +27,71 @@ ENV_FILE="${FLASH_DIR}/.env"
 DOCKER_GID="$(getent group docker | cut -d: -f3)"
 DOCKER_GID="${DOCKER_GID:-999}"
 
-# FLASH_VERSION — the image tag the customer compose pulls. Pinned in the
-# flash_bootstrap/flash.version file (owner bumps it per ship); falls back to
-# `latest`. docker compose reads ${FLASH_VERSION} from this .env automatically.
-FLASH_VERSION="$(cat "$(dirname "$0")/flash.version" 2>/dev/null | tr -d '[:space:]')"
-FLASH_VERSION="${FLASH_VERSION:-latest}"
+install_jq_if_missing() {
+  if command -v jq >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local sudoPrefix=""
+  if [ "$(id -u)" -ne 0 ]; then
+    sudoPrefix="sudo"
+  fi
+
+  $sudoPrefix apt-get update -y >/dev/null 2>&1 || true
+  $sudoPrefix apt-get install -y jq >/dev/null 2>&1 || true
+}
+
+# Same idea as the old FLASH_BOOTSTRAP_BRANCH pattern: which registry/channel a box talks to is
+# derived from which branch THIS flash_bootstrap checkout is on, not a manual export every run.
+# FLASH_REGISTRY_URL / FLASH_CHANNEL env vars still win if explicitly set — this is only the default.
+detect_registry_defaults() {
+  local currentBranch
+  currentBranch="$(git -C "$(dirname "$0")" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")"
+
+  if [ "${currentBranch}" = "staging" ]; then
+    REGISTRY_URL_DEFAULT="https://ft1.kron.co.in"
+    CHANNEL_DEFAULT="canary"
+  else
+    REGISTRY_URL_DEFAULT="https://flashtrade.in"
+    CHANNEL_DEFAULT="stable"
+  fi
+}
+
+# Compose pins every image by digest, never a tag. This seeds the initial pin from
+# flashtrade.in's release_registry; flash-updater owns the keys after that.
+fetch_release_manifest() {
+  local channel="$1"
+  local registryUrl="$2"
+
+  local requestBody
+  requestBody="$(jq -cn --arg channel "${channel}" '{channel: $channel}')"
+
+  curl -fsS --max-time 15 \
+    -X POST "${registryUrl}/release/manifest" \
+    -H "Content-Type: application/json" \
+    -d "${requestBody}" \
+    2>/dev/null || true
+}
+
+install_jq_if_missing
+detect_registry_defaults
+
+FLASH_CHANNEL="${FLASH_CHANNEL:-${CHANNEL_DEFAULT}}"
+FLASH_REGISTRY_URL="${FLASH_REGISTRY_URL:-${REGISTRY_URL_DEFAULT}}"
+
+MANIFEST_RESPONSE="$(fetch_release_manifest "${FLASH_CHANNEL}" "${FLASH_REGISTRY_URL}")"
+
+FLASH_VERSION="$(jq -r '.data.manifest.flashVersion // empty' <<<"${MANIFEST_RESPONSE}" 2>/dev/null || true)"
+FLASH_APP_DIGEST="$(jq -r '.data.manifest.imageDigestMap."flash-app" // empty' <<<"${MANIFEST_RESPONSE}" 2>/dev/null || true)"
+FLASH_MONGO_DIGEST="$(jq -r '.data.manifest.imageDigestMap."flash-mongo" // empty' <<<"${MANIFEST_RESPONSE}" 2>/dev/null || true)"
+FLASH_STRATEGY_DIGEST="$(jq -r '.data.manifest.imageDigestMap."flash-strategy-runtime" // empty' <<<"${MANIFEST_RESPONSE}" 2>/dev/null || true)"
+FLASH_STRATEGY_BUN_DIGEST="$(jq -r '.data.manifest.imageDigestMap."flash-strategy-runtime-bun" // empty' <<<"${MANIFEST_RESPONSE}" 2>/dev/null || true)"
+FLASH_UPDATER_DIGEST="$(jq -r '.data.manifest.imageDigestMap."flash-updater" // empty' <<<"${MANIFEST_RESPONSE}" 2>/dev/null || true)"
+
+if [ -z "${FLASH_VERSION}" ] || [ -z "${FLASH_APP_DIGEST}" ] || [ -z "${FLASH_MONGO_DIGEST}" ] || [ -z "${FLASH_UPDATER_DIGEST}" ]; then
+  echo "==> [02] ERROR: could not fetch a usable manifest from ${FLASH_REGISTRY_URL}/release/manifest (channel '${FLASH_CHANNEL}') — cannot pin images" >&2
+  exit 1
+fi
 
 # FLASH_HOSTNAME — public DNS name Caddy obtains a Let's Encrypt cert for. The
 # droplet's PUBLIC IPv4 in dashed form via the free nip.io resolver
@@ -48,36 +108,54 @@ PUBLIC_IP="$(detect_public_ip)"
 FLASH_HOSTNAME=""
 if [ -n "${PUBLIC_IP}" ]; then FLASH_HOSTNAME="${PUBLIC_IP//./-}.nip.io"; fi
 
+env_set() {
+  local keyName="$1"
+  local keyValue="$2"
+
+  if grep -q "^${keyName}=" "${ENV_FILE}"; then
+    sed -i.bak "s|^${keyName}=.*|${keyName}=${keyValue}|" "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
+  else
+    echo "${keyName}=${keyValue}" >> "${ENV_FILE}"
+  fi
+}
+
+env_seed_if_absent() {
+  local keyName="$1"
+  local keyValue="$2"
+
+  if [ -n "${keyValue}" ] && ! grep -q "^${keyName}=" "${ENV_FILE}"; then
+    echo "${keyName}=${keyValue}" >> "${ENV_FILE}"
+    echo "==> [02] ${keyName} seeded from manifest (channel ${FLASH_CHANNEL})"
+  fi
+}
+
 if [ -f "${ENV_FILE}" ]; then
   echo "==> [02] ${ENV_FILE} already exists — leaving creds untouched."
-  # DOCKER_GID is host-derived, not a cred — reconcile it to the detected value
-  # on every run (a stale/wrong gid breaks strategy-container deploys).
-  if grep -q '^DOCKER_GID=' "${ENV_FILE}"; then
-    sed -i.bak "s/^DOCKER_GID=.*/DOCKER_GID=${DOCKER_GID}/" "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
-  else
-    echo "DOCKER_GID=${DOCKER_GID}" >> "${ENV_FILE}"
-  fi
+
+  # DOCKER_GID and FLASH_HOSTNAME are host-derived, not creds — reconcile every run,
+  # a stale value breaks strategy-container deploys / HTTPS respectively.
+  env_set "DOCKER_GID" "${DOCKER_GID}"
   echo "==> [02] DOCKER_GID set to ${DOCKER_GID} (host docker group)"
-  # FLASH_VERSION may change between ships — keep it in sync with flash.version.
-  if grep -q '^FLASH_VERSION=' "${ENV_FILE}"; then
-    sed -i.bak "s/^FLASH_VERSION=.*/FLASH_VERSION=${FLASH_VERSION}/" "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
-  else
-    echo "FLASH_VERSION=${FLASH_VERSION}" >> "${ENV_FILE}"
-  fi
-  echo "==> [02] FLASH_VERSION pinned to ${FLASH_VERSION}"
-  # FLASH_HOSTNAME is IP-derived, not a cred — reconcile each run so a box that
-  # changes IP (or predates HTTPS) gets the right hostname. Skip if detection
-  # failed (empty) rather than clobbering a known-good value with nothing.
+
   if [ -n "${FLASH_HOSTNAME}" ]; then
-    if grep -q '^FLASH_HOSTNAME=' "${ENV_FILE}"; then
-      sed -i.bak "s/^FLASH_HOSTNAME=.*/FLASH_HOSTNAME=${FLASH_HOSTNAME}/" "${ENV_FILE}" && rm -f "${ENV_FILE}.bak"
-    else
-      echo "FLASH_HOSTNAME=${FLASH_HOSTNAME}" >> "${ENV_FILE}"
-    fi
+    env_set "FLASH_HOSTNAME" "${FLASH_HOSTNAME}"
     echo "==> [02] FLASH_HOSTNAME set to ${FLASH_HOSTNAME}"
   else
     echo "==> [02] WARNING: could not detect public IP — HTTPS hostname unset"
   fi
+
+  # FLASH_CHANNEL + every digest key: seed-if-absent only. Once present, flash-updater
+  # is the single writer — a bootstrap re-run must never fight its own update cycle.
+  env_seed_if_absent "FLASH_REGISTRY_URL" "${FLASH_REGISTRY_URL}"
+  env_seed_if_absent "FLASH_CHANNEL" "${FLASH_CHANNEL}"
+  env_seed_if_absent "FLASH_VERSION" "${FLASH_VERSION}"
+  env_seed_if_absent "FLASH_APP_DIGEST" "${FLASH_APP_DIGEST}"
+  env_seed_if_absent "FLASH_MONGO_DIGEST" "${FLASH_MONGO_DIGEST}"
+  env_seed_if_absent "FLASH_STRATEGY_DIGEST" "${FLASH_STRATEGY_DIGEST}"
+  env_seed_if_absent "FLASH_STRATEGY_BUN_DIGEST" "${FLASH_STRATEGY_BUN_DIGEST}"
+  env_seed_if_absent "FLASH_UPDATER_DIGEST" "${FLASH_UPDATER_DIGEST}"
+  env_seed_if_absent "FLEET_REGISTRATION_TOKEN" "${FLEET_REGISTRATION_TOKEN:-}"
+
   exit 0
 fi
 
@@ -94,8 +172,16 @@ APP_HOST_PORT=7200
 MONGO_HOST_PORT=7220
 ADMIN_PIN=${ADMIN_PIN:-123456}
 DOCKER_GID=${DOCKER_GID}
+FLASH_REGISTRY_URL=${FLASH_REGISTRY_URL}
+FLASH_CHANNEL=${FLASH_CHANNEL}
 FLASH_VERSION=${FLASH_VERSION}
+FLASH_APP_DIGEST=${FLASH_APP_DIGEST}
+FLASH_MONGO_DIGEST=${FLASH_MONGO_DIGEST}
+FLASH_STRATEGY_DIGEST=${FLASH_STRATEGY_DIGEST}
+FLASH_STRATEGY_BUN_DIGEST=${FLASH_STRATEGY_BUN_DIGEST}
+FLASH_UPDATER_DIGEST=${FLASH_UPDATER_DIGEST}
 FLASH_HOSTNAME=${FLASH_HOSTNAME}
+FLEET_REGISTRATION_TOKEN=${FLEET_REGISTRATION_TOKEN:-}
 EOF
 
 chmod 600 "${ENV_FILE}"
