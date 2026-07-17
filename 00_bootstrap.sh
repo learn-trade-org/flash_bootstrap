@@ -13,6 +13,7 @@
 #   01_install_host.sh      apt prereqs + docker engine + compose plugin
 #   01b_registry_login.sh   docker login ghcr.io (read token — for private pull)
 #   02_gen_env.sh           write flash/.env  (app:7200, mongo:7220, pin from ADMIN_PIN)
+#   02b_fleet_register.sh   register in the flashtrade.in fleet registry (one-click only)
 #   03_compose_up.sh        pull images + docker compose up (no build)
 #   04_server_maintenance.sh  run host tasks (server_maintenance/00_main.sh → e.g. swap)
 #   05_install_updater.sh   materialize sibling bin/ + cron (nightly auto-update)
@@ -42,6 +43,7 @@ echo "==> [00] generated ${FLASH_DIR} from assets/"
 bash "${SCRIPT_DIR}/01_install_host.sh"
 bash "${SCRIPT_DIR}/01b_registry_login.sh"
 bash "${SCRIPT_DIR}/02_gen_env.sh"
+bash "${SCRIPT_DIR}/02b_fleet_register.sh"
 bash "${SCRIPT_DIR}/03_compose_up.sh"
 bash "${SCRIPT_DIR}/04_server_maintenance.sh"
 bash "${SCRIPT_DIR}/05_install_updater.sh"
