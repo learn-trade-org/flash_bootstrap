@@ -32,6 +32,17 @@ fi
 DOCKER_GID="$(getent group docker | cut -d: -f3)"
 DOCKER_GID="${DOCKER_GID:-999}"
 
+# FLASH_HOSTNAME = public IPv4 in dashed form via nip.io (Caddy auto-issues a LE cert for it).
+detect_public_ip() {
+  local ip
+  ip="$(curl -s --max-time 3 http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address 2>/dev/null)"
+  if [ -z "${ip}" ]; then ip="$(curl -s --max-time 5 https://ifconfig.me 2>/dev/null)"; fi
+  echo "${ip}"
+}
+PUBLIC_IP="$(detect_public_ip)"
+FLASH_HOSTNAME=""
+if [ -n "${PUBLIC_IP}" ]; then FLASH_HOSTNAME="${PUBLIC_IP//./-}.nip.io"; fi
+
 env_set() {
   local keyName="$1"
   local keyValue="$2"
@@ -45,6 +56,7 @@ env_set() {
 # The replay config + host-derived gid are reconciled every run; mongo creds are written once.
 write_sandbox_config() {
   env_set "DOCKER_GID"            "${DOCKER_GID}"
+  if [ -n "${FLASH_HOSTNAME}" ]; then env_set "FLASH_HOSTNAME" "${FLASH_HOSTNAME}"; fi
   env_set "SANDBOX_DATA_DIR"      "${SANDBOX_DATA_DIR}"
   env_set "SANDBOX_DATA_MODE"     "${SANDBOX_DATA_MODE:-tick}"
   env_set "SANDBOX_DATE"          "${SANDBOX_DATE}"
@@ -71,6 +83,7 @@ APP_HOST_PORT=${APP_HOST_PORT:-7200}
 MONGO_HOST_PORT=${MONGO_HOST_PORT:-7220}
 ADMIN_PIN=${ADMIN_PIN:-123456}
 DOCKER_GID=${DOCKER_GID}
+FLASH_HOSTNAME=${FLASH_HOSTNAME}
 SANDBOX_DATA_DIR=${SANDBOX_DATA_DIR}
 SANDBOX_DATA_MODE=${SANDBOX_DATA_MODE:-tick}
 SANDBOX_DATE=${SANDBOX_DATE}

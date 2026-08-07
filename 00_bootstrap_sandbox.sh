@@ -26,6 +26,7 @@ echo "==> FLASH sandbox bootstrap (runtime dir ${FLASH_DIR})"
 mkdir -p "${FLASH_DIR}"
 cp "${SCRIPT_DIR}/assets/docker-compose.sandbox.customer.yml" "${FLASH_DIR}/docker-compose.sandbox.customer.yml"
 cp "${SCRIPT_DIR}/assets/launch_sandbox.sh" "${FLASH_DIR}/launch_sandbox.sh"
+cp "${SCRIPT_DIR}/assets/Caddyfile" "${FLASH_DIR}/Caddyfile"
 chmod +x "${FLASH_DIR}/launch_sandbox.sh"
 echo "==> [00] generated ${FLASH_DIR} from assets/ (sandbox)"
 
