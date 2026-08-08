@@ -31,7 +31,7 @@ services:
       MONGO_PORT: "27017"
       HOST_STRATEGY_PATH: ${PWD}/db/strategy
       FLASH_ENV: sandbox
-      FLASH_SANDBOX_SELF_URL: http://172.17.0.1:${APP_HOST_PORT:-7200}
+      FLASH_SANDBOX_SELF_URL: http://app:10600
       FLASH_SANDBOX_DATA_PATH: /data
       FLASH_SANDBOX_DATA_MODE: ${SANDBOX_DATA_MODE:-tick}
       FLASH_SANDBOX_SEED_DATE: ${SANDBOX_DATE:?SANDBOX_DATE must be set in .env}
