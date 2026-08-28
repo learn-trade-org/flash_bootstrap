@@ -7,8 +7,12 @@
 # First-run: clone ONLY this repo onto the box, then (replay window + tape via env):
 #   GHCR_USER=<u> GHCR_TOKEN=<read:packages PAT> \
 #   SANDBOX_DATA_DIR=/opt/sandbox_data/day-wise SANDBOX_DATE=20260701 \
-#   SANDBOX_VIRTUAL_START=2026-07-01T09:15:00+05:30 SANDBOX_VIRTUAL_END=2026-07-01T15:30:00+05:30 \
+#   SANDBOX_VIRTUAL_START=2026-07-01T09:15:00+05:30 SANDBOX_VIRTUAL_END=2026-07-01T15:31:00+05:30 \
 #   SANDBOX_CONTROL_KEY=<secret> ./00_bootstrap_sandbox.sh
+#
+# SANDBOX_VIRTUAL_END must be at least 1 min past the real NSE close (15:30 IST): a 1-min candle only
+# becomes readable once the virtual clock ticks into its *next* bucket, so ending the window exactly
+# at close leaves the 15:29 bar permanently unclosed/unreadable.
 #
 # Stage the tape (day folders) under SANDBOX_DATA_DIR first, e.g.
 #   rsync -av hesham@interserver.yuva.dev:/mnt/data/day-wise/20260701/ /opt/sandbox_data/day-wise/20260701/
